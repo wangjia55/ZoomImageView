@@ -5,9 +5,11 @@ import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 
@@ -44,6 +46,22 @@ public class ZoomImageView extends ImageView implements ViewTreeObserver.OnGloba
      * 捕获用户多点手势操作
      */
     private ScaleGestureDetector mScaleGestureDetetor;
+    //--------自由移动
+
+    /**
+     * 记录上一次多点触控的个数
+     */
+    private int mLastPointCount;
+
+    /**
+     * 记录上次触摸的中心点的坐标
+     */
+    private float mLastX;
+    private float mLastY;
+
+    private int mTouchSlop;
+
+    private boolean isCanDrag;
 
     public ZoomImageView(Context context) {
         this(context, null);
@@ -59,6 +77,8 @@ public class ZoomImageView extends ImageView implements ViewTreeObserver.OnGloba
         mMatrix = new Matrix();
         mScaleGestureDetetor = new ScaleGestureDetector(context, this);
         setOnTouchListener(this);
+
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
     }
 
     @Override
@@ -128,7 +148,72 @@ public class ZoomImageView extends ImageView implements ViewTreeObserver.OnGloba
     @Override
     public boolean onTouch(View v, MotionEvent event) {
         mScaleGestureDetetor.onTouchEvent(event);
+
+        float x = 0;
+        float y = 0;
+
+        //多点触摸的数量
+        int pointCount = event.getPointerCount();
+        for (int i = 0; i < pointCount; i++) {
+            x = x + event.getX(i);
+            y = y + event.getY(i);
+        }
+
+        x /= pointCount;
+        y /= pointCount;
+        Log.e("TAG1", mLastPointCount + "*" + pointCount);
+
+        if (mLastPointCount != pointCount) {
+            isCanDrag = false;
+            mLastX = x;
+            mLastY = y;
+        }
+        mLastPointCount = pointCount;
+
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+
+                break;
+            case MotionEvent.ACTION_MOVE:
+                float dx = x - mLastX;
+                float dy = y - mLastY;
+
+                if (!isCanDrag) {
+                    isCanDrag = isMoveAction(dx, dy);
+                }
+
+                if (isCanDrag) {
+                    RectF rectF = getMatrixRectF();
+                    if (getDrawable() != null) {
+                        if (rectF.width() < getWidth()) {
+                            dx = 0;
+                        }
+
+                        if (rectF.height() < getHeight()) {
+                            dy = 0;
+                        }
+
+                        mMatrix.postTranslate(dx, dy);
+                        checkBorderAndCenterWhenScale();
+                        setImageMatrix(mMatrix);
+                    }
+                }
+                mLastX = x;
+                mLastY = y;
+                break;
+            case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_UP:
+                mLastPointCount = 0;
+                break;
+        }
         return true;
+    }
+
+    /**
+     * 判断是否是move
+     */
+    private boolean isMoveAction(float dx, float dy) {
+        return Math.sqrt(dx * dx + dy * dy) > mTouchSlop;
     }
 
 
